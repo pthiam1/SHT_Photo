@@ -15,8 +15,8 @@
         "android.permission.CAMERA"
       ],
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/SHT-Logo.png",
-        "backgroundColor": "#FFFFFF"
+        "foregroundImage": "./assets/images/SHT_logo.png",
+        "backgroundColor": "#061B49"
       }
     },
     "plugins": [

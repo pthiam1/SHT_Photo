@@ -192,7 +192,7 @@ function AppContent() {
         <View style={styles.welcomeCard}>
           <View style={styles.welcomeCopy}>
             <Text style={styles.welcomeEyebrow}>VOTRE JOURNÉE, EN IMAGES</Text>
-            <Text style={styles.welcomeTitle}>Chaque détail{ '\\n' }compte.</Text>
+            <Text style={styles.welcomeTitle}>Chaque détail compte.</Text>
             <Text style={styles.welcomeText}>Capturez, classez et partagez vos opérations en quelques gestes.</Text>
           </View>
           <View style={styles.welcomeIcon}><Text style={styles.welcomeEmoji}>📸</Text></View>
