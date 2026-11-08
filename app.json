@@ -1,0 +1,38 @@
+{
+  "expo": {
+    "name": "SHT Photo",
+    "slug": "sht-photo",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "android": {
+      "package": "fr.sht.photomobile",
+      "versionCode": 1,
+      "permissions": [
+        "CAMERA",
+        "WRITE_EXTERNAL_STORAGE",
+        "READ_EXTERNAL_STORAGE",
+        "android.permission.CAMERA"
+      ],
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/SHT-Logo.png",
+        "backgroundColor": "#FFFFFF"
+      }
+    },
+    "plugins": [
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "SHT Photo a besoin de l'appareil photo pour documenter les marchandises et les conteneurs.",
+          "recordAudioAndroid": false
+        }
+      ],
+      "expo-status-bar"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "aaefe401-e5b7-48c9-b3a1-100d00204d67"
+      }
+    }
+  }
+}

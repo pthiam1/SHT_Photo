@@ -1,0 +1,19 @@
+services:
+  mail-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: sht-photo-mail-api:local
+    env_file:
+      - path: ./server/.env
+        required: false
+    ports:
+      - "${PORT:-8787}:8787"
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
