@@ -33,6 +33,12 @@
       "eas": {
         "projectId": "aaefe401-e5b7-48c9-b3a1-100d00204d67"
       }
+    },
+    "ios": {
+      "bundleIdentifier": "fr.sht.photomobile",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     }
   }
 }

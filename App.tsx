@@ -8,6 +8,7 @@ import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { DEFAULT_RECIPIENT_EMAIL, DEFAULT_SENDER_EMAIL } from './src/constants';
 import { loadOperations as loadStoredOperations, persistOperations } from './src/services/operations';
+import { loadRecipientEmail, persistRecipientEmail } from './src/services/settings';
 import { sendOperationByOutlook } from './src/services/mail';
 import { removePhoto, storePhoto } from './src/services/photos';
 import { Operation, OperationType, PhotoItem, Screen } from './src/types';
@@ -21,6 +22,8 @@ function AppContent() {
   const [reference, setReference] = useState('');
   const [photos, setPhotos] = useState<PhotoItem[]>([]);
   const [reserved, setReserved] = useState(false);
+  const [recipientEmail, setRecipientEmail] = useState(DEFAULT_RECIPIENT_EMAIL);
+  const [recipientEmailDraft, setRecipientEmailDraft] = useState(DEFAULT_RECIPIENT_EMAIL);
   const [operations, setOperations] = useState<Operation[]>([]);
   const [selectedOperation, setSelectedOperation] = useState<Operation | null>(null);
   const [historySearch, setHistorySearch] = useState('');
@@ -29,12 +32,41 @@ function AppContent() {
   const cameraRef = useRef<CameraView>(null);
 
   useEffect(() => { void loadOperations(); }, []);
+  useEffect(() => { void loadRecipientSetting(); }, []);
 
   async function loadOperations() {
     try {
       setOperations(await loadStoredOperations());
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Impossible de charger l’historique local.';
+      Alert.alert('Erreur', message);
+    }
+  }
+
+  async function loadRecipientSetting() {
+    try {
+      const email = await loadRecipientEmail();
+      setRecipientEmail(email);
+      setRecipientEmailDraft(email);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Impossible de charger l’adresse destinataire.';
+      Alert.alert('Erreur', message);
+    }
+  }
+
+  async function saveRecipientSetting() {
+    const email = recipientEmailDraft.trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      Alert.alert('Adresse invalide', 'Saisissez une adresse e-mail valide.');
+      return;
+    }
+    try {
+      await persistRecipientEmail(email);
+      setRecipientEmail(email);
+      setRecipientEmailDraft(email);
+      Alert.alert('Réglage enregistré', 'La nouvelle adresse sera utilisée pour les prochaines opérations.');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Impossible d’enregistrer l’adresse destinataire.';
       Alert.alert('Erreur', message);
     }
   }
@@ -102,7 +134,7 @@ function AppContent() {
       photos,
       status,
       senderEmail: DEFAULT_SENDER_EMAIL,
-      recipientEmail: DEFAULT_RECIPIENT_EMAIL,
+      recipientEmail,
       reserved: type === 'RECEPTION' && reserved,
     };
     const next = [operation, ...operations];
@@ -432,14 +464,25 @@ function AppContent() {
           </View>
         </View>
         <Text style={styles.heading}>Configuration</Text>
-        <Text style={styles.muted}>Ces adresses sont définies dans le fichier .env et servent de valeurs par défaut pour les opérations.</Text>
+        <Text style={styles.muted}>L’adresse destinataire sera utilisée pour les prochaines opérations.</Text>
         <View style={styles.settingCard}>
           <Text style={styles.settingLabel}>Adresse expéditeur</Text>
           <Text style={styles.settingValue}>{DEFAULT_SENDER_EMAIL}</Text>
         </View>
         <View style={styles.settingCard}>
           <Text style={styles.settingLabel}>Adresse récepteur</Text>
-          <Text style={styles.settingValue}>{DEFAULT_RECIPIENT_EMAIL}</Text>
+          <TextInput
+            value={recipientEmailDraft}
+            onChangeText={setRecipientEmailDraft}
+            placeholder="exemple@domaine.com"
+            placeholderTextColor={color('#9AA8B8')}
+            keyboardType="email-address"
+            autoCapitalize="none"
+            autoCorrect={false}
+            style={styles.settingsInput}
+            accessibilityLabel="Adresse e-mail destinataire"
+          />
+          <Button title="Enregistrer l’adresse" onPress={() => void saveRecipientSetting()} />
         </View>
         <Text style={styles.sectionCaption}>Stockage</Text>
         <Text style={styles.muted}>Les photos et les opérations sont conservées dans le stockage privé de l’application.</Text>
@@ -599,6 +642,7 @@ function createStyles(isDark: boolean) {
   settingCard: { backgroundColor: color('#FFFFFF'), borderRadius: 17, padding: 16, marginTop: 12, borderWidth: 1, borderColor: color('#E9EEF5') },
   settingLabel: { color: color('#8291A5'), fontSize: 12, fontWeight: '800', marginBottom: 6 },
   settingValue: { color: color('#102A4C'), fontSize: 15, fontWeight: '900' },
+  settingsInput: { backgroundColor: color('#F5F7FC'), borderColor: color('#DDE6F0'), borderWidth: 1, borderRadius: 12, padding: 12, fontSize: 15, color: color('#102A4C') },
   sectionCaption: { color: color('#102A4C'), fontSize: 16, fontWeight: '900', marginTop: 28, marginBottom: 8 },
   confirmationLabel: { color: color('#102A4C'), fontSize: 16, fontWeight: '900', marginTop: 22, marginBottom: 2 },
   confirmationHint: { color: color('#8291A5'), fontSize: 12, lineHeight: 18, marginTop: 8 },
