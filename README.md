@@ -133,13 +133,14 @@ Réception : `NUMERO_UT_AAAAMMJJ_HHMMSS_INDEX.jpg`
 
 Conteneur : `NUMERO_CONTENEUR_AAAAMMJJ_HHMMSS_CATEGORIE_INDEX.jpg`
 ## Aperçu des écrans
-<figure>
+<figcaption style="text-align: center; font-style: italic;">Aperçu des écrans de l'application</figcaption>
   <img src="./captures/accueil.png" width="200" alt="Accueil">
   <img src="./captures/operation.png" width="200" alt="Nouvelle opération">
   <img src="./captures/photo.png" width="200" alt="Appareil photo">
   <!-- <img src="./captures/galerie.png" width="200" alt="Galerie"> -->
   <!-- <img src="./captures/detail.png" width="200" alt="Détail d'une opération"> -->
   <img src="./captures/reglages.png" width="200" alt="Réglages">
-</figure>
+</figcaption>
+
 ## Auteurs
 - Papa THIAM

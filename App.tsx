@@ -14,6 +14,9 @@ import { Operation, OperationType, PhotoItem, Screen } from './src/types';
 
 function AppContent() {
   const [screen, setScreen] = useState<Screen>('HOME');
+  const [isDark, setIsDark] = useState(false);
+  const color = (value: string) => themeColor(value, isDark);
+  const styles = createStyles(isDark);
   const [type, setType] = useState<OperationType>('RECEPTION');
   const [reference, setReference] = useState('');
   const [photos, setPhotos] = useState<PhotoItem[]>([]);
@@ -123,14 +126,50 @@ function AppContent() {
     }
   }
 
+  function statusLabel(status: Operation['status']) {
+    return {
+      BROUILLON: 'BROUILLON',
+      EN_ATTENTE: 'EN ATTENTE D’ENVOI',
+      ENVOYE: 'ENVOYÉ',
+      ECHEC: 'ÉCHEC D’ENVOI',
+    }[status];
+  }
+
+  function statusStyle(status: Operation['status']) {
+    if (status === 'ENVOYE') return styles.statusSent;
+    if (status === 'EN_ATTENTE') return styles.statusPending;
+    if (status === 'ECHEC') return styles.statusFailed;
+    return styles.statusDraft;
+  }
+
+  async function resendOperation(operation: Operation) {
+    const pendingOperation = { ...operation, status: 'EN_ATTENTE' as const, lastError: undefined };
+    const pendingOperations = operations.map(item => item.id === operation.id ? pendingOperation : item);
+    await saveOperations(pendingOperations);
+    setSelectedOperation(pendingOperation);
+
+    try {
+      await sendOperationByOutlook(pendingOperation);
+      const sentOperation = { ...pendingOperation, status: 'ENVOYE' as const };
+      await saveOperations(pendingOperations.map(item => item.id === operation.id ? sentOperation : item));
+      setSelectedOperation(sentOperation);
+      Alert.alert('Envoi confirmé', 'Le message a été accepté par Outlook et enregistré dans les éléments envoyés.');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'L’envoi Outlook a échoué.';
+      const failedOperation = { ...pendingOperation, status: 'ECHEC' as const, lastError: message };
+      await saveOperations(pendingOperations.map(item => item.id === operation.id ? failedOperation : item));
+      setSelectedOperation(failedOperation);
+      Alert.alert('Échec de l’envoi', `${message}\nLes photos restent conservées localement.`);
+    }
+  }
+
   function Header({ title }: { title: string }) {
     return <View style={styles.header}>
       <View style={styles.brandRow}>
-        <View style={styles.brandMark}><Text style={styles.brandMarkText}>✦</Text></View>
-        <View>
-          <Text style={styles.headerTitle}>SHT PHOTO</Text>
-          <Text style={styles.headerEyebrow}>ESPACE TERRAIN</Text>
+        <View style={styles.brandMark}>
+          <Image source={require('./assets/images/SHT_logo.png')} style={styles.brandLogo} resizeMode="contain" />
         </View>
+        <Text style={styles.headerTitle}>SHT PHOTO</Text>
       </View>
       <Text style={styles.headerSubtitle}>{title}</Text>
     </View>;
@@ -185,85 +224,73 @@ function AppContent() {
   }
 
   return <SafeAreaView style={styles.root}>
-    <StatusBar style="dark" />
+    <StatusBar style={isDark ? "light" : "dark"} />
     {screen === 'HOME' && <>
-      <Header title="Bonjour, prêt pour le terrain ?" />
-      <ScrollView contentContainerStyle={styles.homeContent} showsVerticalScrollIndicator={false}>
-        <View style={styles.welcomeCard}>
-          <View style={styles.welcomeCopy}>
-            <Text style={styles.welcomeEyebrow}>VOTRE JOURNÉE, EN IMAGES</Text>
-            <Text style={styles.welcomeTitle}>Chaque détail compte.</Text>
-            <Text style={styles.welcomeText}>Capturez, classez et partagez vos opérations en quelques gestes.</Text>
-          </View>
-          <View style={styles.welcomeIcon}><Text style={styles.welcomeEmoji}>📸</Text></View>
-          <View style={styles.welcomeBubble} />
-        </View>
+      <Header title="Que souhaitez-vous faire ?" />
+      <ScrollView contentContainerStyle={styles.simpleHome} showsVerticalScrollIndicator={false}>
+        <Text style={styles.homeIntro}>En quelques étapes, prenez vos photos et envoyez votre compte-rendu.</Text>
 
-        <View style={styles.sectionHeadingRow}>
+        <TouchableOpacity
+          style={[styles.simpleAction, { backgroundColor: color('#E5F4E8'), borderColor: color('#B9DCC1') }]}
+          onPress={() => startOperation('RECEPTION')} activeOpacity={0.85}>
+          <View style={[styles.simpleActionIcon, { backgroundColor: color('#E4F7F5') }]}>
+            <Text style={styles.simpleActionEmoji}>📦</Text>
+          </View>
+          <View style={styles.simpleActionText}>
+            <Text style={styles.simpleActionTitle}>Réception</Text>
+            <Text style={styles.simpleActionHint}>Photographier une réception de marchandises</Text>
+          </View>
+          <Text style={styles.simpleChevron}>›</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.simpleAction, { backgroundColor: color('#E5EEFF'), borderColor: color('#B9CCF0') }]}
+          onPress={() => startOperation('CONTENEUR')} activeOpacity={0.85}>
+          <View style={[styles.simpleActionIcon, { backgroundColor: color('#EAF0FF') }]}>
+            <Text style={styles.simpleActionEmoji}>🚢</Text>
+          </View>
+          <View style={styles.simpleActionText}>
+            <Text style={styles.simpleActionTitle}>Chargement conteneur</Text>
+            <Text style={styles.simpleActionHint}>Photographier un chargement</Text>
+          </View>
+          <Text style={styles.simpleChevron}>›</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.simpleHistory} onPress={() => setScreen('HISTORY')} activeOpacity={0.85}>
           <View>
-            <Text style={styles.heading}>Nouvelle opération</Text>
-            <Text style={styles.muted}>Que souhaitez-vous documenter ?</Text>
+            <Text style={styles.simpleHistoryTitle}>Mes opérations</Text>
+            <Text style={styles.simpleHistoryHint}>Consulter les opérations enregistrées</Text>
           </View>
-          <View style={styles.sparkle}><Text style={styles.sparkleText}>✦</Text></View>
-        </View>
-
-        <TouchableOpacity style={[styles.actionCard, styles.receptionCard]} onPress={() => startOperation('RECEPTION')} activeOpacity={0.88}>
-          <View style={styles.actionIcon}><Text style={styles.actionEmoji}>📦</Text></View>
-          <View style={styles.actionCopy}>
-            <Text style={styles.actionTitle}>Réception</Text>
-            <Text style={styles.actionDescription}>Documenter l’arrivée des marchandises</Text>
-            <Text style={styles.actionLink}>Démarrer  →</Text>
-          </View>
-          <Text style={styles.actionArrow}>↗</Text>
+          <View style={styles.simpleCount}><Text style={styles.simpleCountText}>{operations.length}</Text></View>
+          <Text style={styles.simpleChevron}>›</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={[styles.actionCard, styles.containerCard]} onPress={() => startOperation('CONTENEUR')} activeOpacity={0.88}>
-          <View style={styles.actionIcon}><Text style={styles.actionEmoji}>🚢</Text></View>
-          <View style={styles.actionCopy}>
-            <Text style={styles.actionTitle}>Chargement conteneur</Text>
-            <Text style={styles.actionDescription}>Suivre et photographier le chargement</Text>
-            <Text style={styles.actionLink}>Démarrer  →</Text>
-          </View>
-          <Text style={styles.actionArrow}>↗</Text>
-        </TouchableOpacity>
-
-        <View style={styles.sectionHeadingRow}>
-          <View>
-            <Text style={styles.heading}>Votre activité</Text>
-            <Text style={styles.muted}>Retrouvez vos dernières opérations.</Text>
-          </View>
-          <TouchableOpacity onPress={() => setScreen('HISTORY')}><Text style={styles.seeAll}>Tout voir →</Text></TouchableOpacity>
-        </View>
-        <TouchableOpacity style={styles.activityCard} onPress={() => setScreen('HISTORY')} activeOpacity={0.85}>
-          <View style={styles.activityIcon}><Text style={styles.activityEmoji}>🗂️</Text></View>
-          <View style={styles.activityCopy}>
-            <Text style={styles.activityTitle}>Historique des opérations</Text>
-            <Text style={styles.activitySubtitle}>Consulter vos dossiers enregistrés</Text>
-          </View>
-          <View style={styles.countBadge}><Text style={styles.countText}>{operations.length}</Text></View>
-        </TouchableOpacity>
+        <Text style={styles.simpleFooter}>SHT PHOTO · Simple, rapide, efficace.</Text>
       </ScrollView>
     </>}
 
     {screen === 'FORM' && <>
       <Header title={type === 'RECEPTION' ? 'Réception de marchandises' : 'Chargement de conteneur'} />
       <ScrollView contentContainerStyle={styles.content}>
+        <View style={styles.stepPill}><Text style={styles.stepPillText}>ÉTAPE 1 SUR 3 · IDENTIFICATION</Text></View>
+        <Text style={styles.formTitle}>Identifiez l’opération</Text>
+        <Text style={styles.formHint}>Saisissez la référence indiquée sur le document ou le conteneur.</Text>
         <Text style={styles.label}>{type === 'RECEPTION' ? 'Numéro UT' : 'Numéro du conteneur'}</Text>
         <TextInput value={reference} onChangeText={setReference}
           placeholder={type === 'RECEPTION' ? 'Ex. UT123456' : 'Ex. MSCU1234567'}
+          placeholderTextColor="#9AA8B8"
           autoCapitalize="characters" style={styles.input} />
-        <Text style={styles.muted}>Expéditeur : {DEFAULT_SENDER_EMAIL}</Text>
-        <Text style={styles.muted}>Récepteur : {DEFAULT_RECIPIENT_EMAIL}</Text>
         {type === 'RECEPTION' && <View style={styles.switchRow}>
           <View style={styles.switchText}>
-            <Text style={styles.label}>Réserver cette réception</Text>
-            <Text style={styles.muted}>Marquez l’opération comme réservée avant son enregistrement.</Text>
+            <Text style={styles.switchTitle}>Réception à réserver</Text>
+            <Text style={styles.muted}>Activez si cette réception doit être réservée.</Text>
           </View>
-          <Switch value={reserved} onValueChange={setReserved} />
+          <Switch value={reserved} onValueChange={setReserved} trackColor={{ false: color('#D7E0EA'), true: color('#8AD9D5') }} thumbColor={reserved ? color('#079DA8') : color('#FFFFFF')} />
         </View>}
-        <Button title="Ouvrir l’appareil photo" disabled={!reference.trim()} onPress={() => void startCamera()} />
+        <View style={styles.formTip}><Text style={styles.formTipText}>💡 Vous pourrez ajouter ou supprimer des photos avant l’envoi.</Text></View>
+        <Button title="Continuer · Prendre des photos" disabled={!reference.trim()} onPress={() => void startCamera()} />
         <Button title={`Voir les photos (${photos.length})`} secondary onPress={() => setScreen('REVIEW')} />
-        <Button title="Retour" secondary onPress={() => setScreen('HOME')} />
+        <Button title="Retour à l’accueil" secondary onPress={() => setScreen('HOME')} />
       </ScrollView>
     </>}
 
@@ -354,7 +381,7 @@ function AppContent() {
           onPress={() => { setSelectedOperation(item); setScreen('DETAIL'); }}>
           <Text style={styles.historyTitle}>{item.reference}</Text>
           <Text style={styles.muted}>{item.type === 'RECEPTION' ? 'Réception' : 'Conteneur'} · {item.photos.length} photo(s)</Text>
-          <Text style={styles.status}>{item.status === 'EN_ATTENTE' ? 'EN ATTENTE D’ENVOI' : item.reserved ? 'RÉSERVÉE' : 'BROUILLON'}{item.lastError ? ` — ${item.lastError}` : ''}</Text>
+          <Text style={[styles.status, statusStyle(item.status)]}>{statusLabel(item.status)}{item.lastError ? ` — ${item.lastError}` : ''}</Text>
           <Text style={styles.muted}>{new Date(item.createdAt).toLocaleString()}</Text>
         </TouchableOpacity>} />
       <View style={styles.bottomActions}><Button title="Retour à l’accueil" secondary onPress={() => setScreen('HOME')} /></View>
@@ -365,7 +392,7 @@ function AppContent() {
       <ScrollView contentContainerStyle={styles.content}>
         <Text style={styles.heading}>{selectedOperation.reference}</Text>
         <Text style={styles.muted}>{selectedOperation.type === 'RECEPTION' ? 'Réception de marchandises' : 'Chargement de conteneur'}</Text>
-        <Text style={styles.label}>Statut : {selectedOperation.status === 'EN_ATTENTE' ? 'En attente d’envoi' : 'Brouillon local'}</Text>
+        <Text style={styles.label}>Statut : {statusLabel(selectedOperation.status)}</Text>
         <Text style={styles.muted}>Date : {new Date(selectedOperation.createdAt).toLocaleString()}</Text>
         <Text style={styles.muted}>Expéditeur : {selectedOperation.senderEmail}</Text>
         <Text style={styles.muted}>Récepteur : {selectedOperation.recipientEmail}</Text>
@@ -378,12 +405,32 @@ function AppContent() {
           </TouchableOpacity>
           <Text style={styles.photoName}>{p.filename}</Text>
         </View>)}
+        {selectedOperation.status !== 'ENVOYE' && <Button
+          title={selectedOperation.status === 'ECHEC' ? '↻ Réessayer l’envoi' : '✉ Envoyer maintenant'}
+          onPress={() => void resendOperation(selectedOperation)}
+        />}
         <Button title="Retour à l’historique" secondary onPress={() => setScreen('HISTORY')} />
       </ScrollView>
     </>}
     {screen === 'SETTINGS' && <>
       <Header title="Réglages" />
       <ScrollView contentContainerStyle={styles.content}>
+        <Text style={styles.heading}>Apparence</Text>
+        <View style={styles.settingCard}>
+          <View style={styles.themeSettingRow}>
+            <View style={styles.switchText}>
+              <Text style={styles.settingValue}>{isDark ? 'Mode nuit' : 'Mode jour'}</Text>
+              <Text style={styles.settingLabel}>Choisissez un affichage clair ou sombre.</Text>
+            </View>
+            <Switch
+              value={isDark}
+              onValueChange={setIsDark}
+              trackColor={{ false: color('#B8C7D8'), true: color('#2786D8') }}
+              thumbColor={isDark ? color('#FFFFFF') : color('#FFFFFF')}
+              accessibilityLabel="Activer le mode nuit"
+            />
+          </View>
+        </View>
         <Text style={styles.heading}>Configuration</Text>
         <Text style={styles.muted}>Ces adresses sont définies dans le fichier .env et servent de valeurs par défaut pour les opérations.</Text>
         <View style={styles.settingCard}>
@@ -422,111 +469,213 @@ export default function App() {
   );
 }
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#F5F7FC' },
-  header: { backgroundColor: '#071B3B', paddingHorizontal: 22, paddingTop: 14, paddingBottom: 22, borderBottomLeftRadius: 26, borderBottomRightRadius: 26 },
+function createStyles(isDark: boolean) {
+  const color = (value: string) => themeColor(value, isDark);
+  return StyleSheet.create({
+  root: { flex: 1, backgroundColor: color('#F5F7FC') },
+  header: { backgroundColor: color('#071B3B'), paddingHorizontal: 22, paddingTop: 14, paddingBottom: 22, borderBottomLeftRadius: 26, borderBottomRightRadius: 26 },
   brandRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  brandMark: { width: 36, height: 36, borderRadius: 13, backgroundColor: '#13C6D5', alignItems: 'center', justifyContent: 'center' },
-  brandMarkText: { color: '#071B3B', fontSize: 23, fontWeight: '900' },
-  headerTitle: { color: '#FFFFFF', fontSize: 13, fontWeight: '900', letterSpacing: 2 },
-  headerEyebrow: { color: '#8FA8C7', fontSize: 9, fontWeight: '800', letterSpacing: 1.8, marginTop: 2 },
-  headerSubtitle: { color: '#FFFFFF', fontSize: 23, fontWeight: '900', marginTop: 18, letterSpacing: -0.4 },
+  brandMark: { width: 36, height: 36, borderRadius: 13, backgroundColor: color('#FFFFFF'), alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  brandLogo: { width: 32, height: 32 },
+  headerTitle: { color: isDark ? '#D7E7F8' : color('#FFFFFF'), fontSize: 13, fontWeight: '900', letterSpacing: 2 },
+  headerEyebrow: { color: color('#8FA8C7'), fontSize: 9, fontWeight: '800', letterSpacing: 1.8, marginTop: 2 },
+  headerSubtitle: { color: isDark ? '#C3D7EC' : color('#FFFFFF'), fontSize: 23, fontWeight: '900', marginTop: 18, letterSpacing: -0.4 },
   content: { padding: 20, paddingBottom: 32 },
   homeContent: { padding: 18, paddingBottom: 30 },
-  welcomeCard: { backgroundColor: '#0B2A53', borderRadius: 24, padding: 20, minHeight: 180, overflow: 'hidden', flexDirection: 'row', alignItems: 'center', marginBottom: 26 },
+  simpleHome: { padding: 20, paddingTop: 24, paddingBottom: 36 },
+  homeIntro: { color: color('#687B91'), fontSize: 14, lineHeight: 21, marginBottom: 22 },
+  simpleAction: { backgroundColor: color('#FFFFFF'), borderRadius: 18, borderWidth: 1, borderColor: color('#E5EBF2'), padding: 16, flexDirection: 'row', alignItems: 'center', marginBottom: 13, minHeight: 100 },
+  simpleActionIcon: { width: 54, height: 54, borderRadius: 16, alignItems: 'center', justifyContent: 'center', marginRight: 14 },
+  simpleActionEmoji: { fontSize: 26 },
+  simpleActionText: { flex: 1, paddingRight: 8 },
+  simpleActionTitle: { color: color('#102A4C'), fontSize: 16, fontWeight: '800', marginBottom: 5 },
+  simpleActionHint: { color: color('#718198'), fontSize: 12, lineHeight: 17 },
+  simpleChevron: { color: color('#079DA8'), fontSize: 29, fontWeight: '400', marginLeft: 5 },
+  simpleHistory: { marginTop: 10, backgroundColor: color('#F0F7FA'), borderRadius: 18, padding: 16, flexDirection: 'row', alignItems: 'center' },
+  simpleHistoryTitle: { color: color('#102A4C'), fontSize: 14, fontWeight: '800' },
+  simpleHistoryHint: { color: color('#718198'), fontSize: 11, marginTop: 4 },
+  simpleCount: { backgroundColor: color('#D9F3F1'), minWidth: 30, height: 30, borderRadius: 10, alignItems: 'center', justifyContent: 'center', marginLeft: 'auto' },
+  simpleCountText: { color: color('#078F9A'), fontWeight: '900' },
+  simpleFooter: { textAlign: 'center', color: color('#9AA8B8'), fontSize: 10, marginTop: 30, letterSpacing: 0.4 },
+  stepPill: { alignSelf: 'flex-start', backgroundColor: color('#E0F6F4'), paddingVertical: 7, paddingHorizontal: 10, borderRadius: 9, marginBottom: 14 },
+  stepPillText: { color: color('#078F9A'), fontSize: 10, fontWeight: '900', letterSpacing: 0.7 },
+  formTitle: { color: color('#102A4C'), fontSize: 22, fontWeight: '900', marginBottom: 6 },
+  formHint: { color: color('#718198'), fontSize: 13, lineHeight: 19, marginBottom: 12 },
+  switchTitle: { color: color('#102A4C'), fontSize: 14, fontWeight: '800', marginTop: 12 },
+  formTip: { backgroundColor: color('#F0F7FA'), padding: 13, borderRadius: 13, marginTop: 18, marginBottom: 8 },
+  formTipText: { color: color('#557087'), fontSize: 12, lineHeight: 18 },
+  welcomeCard: { backgroundColor: color('#0B2A53'), borderRadius: 24, padding: 20, minHeight: 180, overflow: 'hidden', flexDirection: 'row', alignItems: 'center', marginBottom: 26 },
   welcomeCopy: { flex: 1, zIndex: 2, paddingRight: 6 },
-  welcomeEyebrow: { color: '#42D6D8', fontSize: 9, fontWeight: '900', letterSpacing: 1.5, marginBottom: 9 },
-  welcomeTitle: { color: '#FFFFFF', fontSize: 27, fontWeight: '900', lineHeight: 30, letterSpacing: -0.7 },
-  welcomeText: { color: '#C0D0E4', fontSize: 12, lineHeight: 18, marginTop: 9, maxWidth: 210 },
-  welcomeIcon: { width: 76, height: 76, borderRadius: 25, backgroundColor: '#123F70', alignItems: 'center', justifyContent: 'center', transform: [{ rotate: '8deg' }], zIndex: 2 },
+  welcomeEyebrow: { color: color('#42D6D8'), fontSize: 9, fontWeight: '900', letterSpacing: 1.5, marginBottom: 9 },
+  welcomeTitle: { color: color('#FFFFFF'), fontSize: 27, fontWeight: '900', lineHeight: 30, letterSpacing: -0.7 },
+  welcomeText: { color: color('#C0D0E4'), fontSize: 12, lineHeight: 18, marginTop: 9, maxWidth: 210 },
+  welcomeIcon: { width: 76, height: 76, borderRadius: 25, backgroundColor: color('#123F70'), alignItems: 'center', justifyContent: 'center', transform: [{ rotate: '8deg' }], zIndex: 2 },
   welcomeEmoji: { fontSize: 38 },
-  welcomeBubble: { position: 'absolute', width: 170, height: 170, borderRadius: 85, backgroundColor: '#123D68', right: -60, bottom: -95 },
+  welcomeBubble: { position: 'absolute', width: 170, height: 170, borderRadius: 85, backgroundColor: color('#123D68'), right: -60, bottom: -95 },
   sectionHeadingRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, marginTop: 2 },
-  heading: { fontSize: 19, fontWeight: '900', color: '#102A4C', marginBottom: 4, letterSpacing: -0.3 },
-  muted: { color: '#7B8BA2', fontSize: 12, lineHeight: 18, marginBottom: 8 },
-  sparkle: { width: 34, height: 34, borderRadius: 12, backgroundColor: '#E1FAF8', alignItems: 'center', justifyContent: 'center' },
-  sparkleText: { color: '#0AAAB7', fontSize: 20 },
+  heading: { fontSize: 19, fontWeight: '900', color: color('#102A4C'), marginBottom: 4, letterSpacing: -0.3 },
+  muted: { color: color('#7B8BA2'), fontSize: 12, lineHeight: 18, marginBottom: 8 },
+  sparkle: { width: 34, height: 34, borderRadius: 12, backgroundColor: color('#E1FAF8'), alignItems: 'center', justifyContent: 'center' },
+  sparkleText: { color: color('#0AAAB7'), fontSize: 20 },
   actionCard: { borderRadius: 21, padding: 16, flexDirection: 'row', alignItems: 'center', marginBottom: 12, minHeight: 124, borderWidth: 1 },
-  receptionCard: { backgroundColor: '#E9F8F7', borderColor: '#D3F0ED' },
-  containerCard: { backgroundColor: '#EEF2FF', borderColor: '#E0E7FF' },
-  actionIcon: { width: 54, height: 54, borderRadius: 18, backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center', marginRight: 13 },
+  receptionCard: { backgroundColor: color('#E9F8F7'), borderColor: color('#D3F0ED') },
+  containerCard: { backgroundColor: color('#EEF2FF'), borderColor: color('#E0E7FF') },
+  actionIcon: { width: 54, height: 54, borderRadius: 18, backgroundColor: color('#FFFFFF'), alignItems: 'center', justifyContent: 'center', marginRight: 13 },
   actionEmoji: { fontSize: 27 },
   actionCopy: { flex: 1 },
-  actionTitle: { color: '#102A4C', fontSize: 16, fontWeight: '900', marginBottom: 4 },
-  actionDescription: { color: '#647891', fontSize: 11, lineHeight: 16, marginBottom: 8 },
-  actionLink: { color: '#079DA8', fontSize: 12, fontWeight: '900' },
-  actionArrow: { color: '#7892AA', fontSize: 22, fontWeight: '700', alignSelf: 'flex-start' },
-  seeAll: { color: '#079DA8', fontSize: 12, fontWeight: '900' },
-  activityCard: { backgroundColor: '#FFFFFF', borderRadius: 18, padding: 14, flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: '#E9EEF5' },
-  activityIcon: { width: 44, height: 44, borderRadius: 15, backgroundColor: '#F0F4FF', alignItems: 'center', justifyContent: 'center', marginRight: 12 },
+  actionTitle: { color: color('#102A4C'), fontSize: 16, fontWeight: '900', marginBottom: 4 },
+  actionDescription: { color: color('#647891'), fontSize: 11, lineHeight: 16, marginBottom: 8 },
+  actionLink: { color: color('#079DA8'), fontSize: 12, fontWeight: '900' },
+  actionArrow: { color: color('#7892AA'), fontSize: 22, fontWeight: '700', alignSelf: 'flex-start' },
+  seeAll: { color: color('#079DA8'), fontSize: 12, fontWeight: '900' },
+  activityCard: { backgroundColor: color('#FFFFFF'), borderRadius: 18, padding: 14, flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: color('#E9EEF5') },
+  activityIcon: { width: 44, height: 44, borderRadius: 15, backgroundColor: color('#F0F4FF'), alignItems: 'center', justifyContent: 'center', marginRight: 12 },
   activityEmoji: { fontSize: 21 },
   activityCopy: { flex: 1 },
-  activityTitle: { color: '#102A4C', fontSize: 13, fontWeight: '900' },
-  activitySubtitle: { color: '#8291A5', fontSize: 10, marginTop: 4 },
-  countBadge: { minWidth: 30, height: 30, borderRadius: 11, backgroundColor: '#E1FAF8', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 8 },
-  countText: { color: '#078F9A', fontWeight: '900' },
-  label: { color: '#102A4C', fontWeight: '800', marginTop: 16, marginBottom: 8 },
-  input: { backgroundColor: '#FFFFFF', borderColor: '#DDE6F0', borderWidth: 1, borderRadius: 15, padding: 15, fontSize: 16, color: '#102A4C' },
-  button: { backgroundColor: '#08AEB9', padding: 15, borderRadius: 15, alignItems: 'center', marginTop: 12, shadowColor: '#079DA8', shadowOpacity: 0.16, shadowRadius: 9, shadowOffset: { width: 0, height: 4 }, elevation: 2 },
-  buttonText: { color: '#06223F', fontSize: 14, fontWeight: '900' },
-  secondaryButton: { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#DDE6F0', shadowOpacity: 0, elevation: 0 },
-  secondaryButtonText: { color: '#183554' },
+  activityTitle: { color: color('#102A4C'), fontSize: 13, fontWeight: '900' },
+  activitySubtitle: { color: color('#8291A5'), fontSize: 10, marginTop: 4 },
+  countBadge: { minWidth: 30, height: 30, borderRadius: 11, backgroundColor: color('#E1FAF8'), alignItems: 'center', justifyContent: 'center', paddingHorizontal: 8 },
+  countText: { color: color('#078F9A'), fontWeight: '900' },
+  label: { color: color('#102A4C'), fontWeight: '800', marginTop: 16, marginBottom: 8 },
+  input: { backgroundColor: color('#FFFFFF'), borderColor: color('#DDE6F0'), borderWidth: 1, borderRadius: 15, padding: 15, fontSize: 16, color: color('#102A4C') },
+  button: { backgroundColor: color('#08AEB9'), padding: 15, borderRadius: 15, alignItems: 'center', marginTop: 12, shadowColor: color('#079DA8'), shadowOpacity: 0.16, shadowRadius: 9, shadowOffset: { width: 0, height: 4 }, elevation: 2 },
+  buttonText: { color: color('#F8FAFC'), fontSize: 14, fontWeight: '900' },
+  secondaryButton: { backgroundColor: color('#FFFFFF'), borderWidth: 1, borderColor: color('#DDE6F0'), shadowOpacity: 0, elevation: 0 },
+  secondaryButtonText: { color: color('#183554') },
   disabledButton: { opacity: 0.45 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginVertical: 10 },
-  chip: { borderWidth: 1, borderColor: '#DDE6F0', borderRadius: 18, paddingVertical: 8, paddingHorizontal: 12, backgroundColor: '#FFFFFF' },
-  chipSelected: { backgroundColor: '#0B2A53', borderColor: '#0B2A53' },
-  chipText: { color: '#183554', fontWeight: '600' },
-  chipSelectedText: { color: '#FFFFFF', fontWeight: '700' },
+  chip: { borderWidth: 1, borderColor: color('#DDE6F0'), borderRadius: 18, paddingVertical: 8, paddingHorizontal: 12, backgroundColor: color('#FFFFFF') },
+  chipSelected: { backgroundColor: color('#0B2A53'), borderColor: color('#0B2A53') },
+  chipText: { color: color('#183554'), fontWeight: '600' },
+  chipSelectedText: { color: color('#FFFFFF'), fontWeight: '700' },
   reviewTop: { paddingHorizontal: 16, paddingTop: 10 },
-  searchContainer: { paddingHorizontal: 16, paddingTop: 12, backgroundColor: '#F5F7FC' },
-  searchInput: { backgroundColor: '#FFFFFF', borderColor: '#E1E8F0', borderWidth: 1, borderRadius: 15, paddingHorizontal: 14, paddingVertical: 13, fontSize: 14, color: '#102A4C' },
-  empty: { color: '#8291A5', textAlign: 'center', margin: 24, fontSize: 14 },
+  searchContainer: { paddingHorizontal: 16, paddingTop: 12, backgroundColor: color('#F5F7FC') },
+  searchInput: { backgroundColor: color('#FFFFFF'), borderColor: color('#E1E8F0'), borderWidth: 1, borderRadius: 15, paddingHorizontal: 14, paddingVertical: 13, fontSize: 14, color: color('#102A4C') },
+  empty: { color: color('#8291A5'), textAlign: 'center', margin: 24, fontSize: 14 },
   photoGrid: { padding: 10, paddingBottom: 20 },
-  photoCard: { flex: 1, margin: 6, padding: 8, backgroundColor: '#FFFFFF', borderRadius: 17, borderWidth: 1, borderColor: '#E9EEF5' },
-  photo: { width: '100%', height: 150, borderRadius: 12, backgroundColor: '#E9EEF5' },
-  photoName: { color: '#183554', fontSize: 11, marginTop: 7 },
+  photoCard: { flex: 1, margin: 6, padding: 8, backgroundColor: color('#FFFFFF'), borderRadius: 17, borderWidth: 1, borderColor: color('#E9EEF5') },
+  photo: { width: '100%', height: 150, borderRadius: 12, backgroundColor: color('#E9EEF5') },
+  photoName: { color: color('#183554'), fontSize: 11, marginTop: 7 },
   switchRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 },
   switchText: { flex: 1, marginRight: 12 },
-  deleteButton: { backgroundColor: '#FFF0F0', padding: 8, borderRadius: 10, alignItems: 'center', marginTop: 8 },
-  deleteText: { color: '#D04452', fontWeight: '800', fontSize: 12 },
-  bottomActions: { padding: 14, backgroundColor: '#F5F7FC' },
-  bottomNavigation: { flexDirection: 'row', backgroundColor: '#FFFFFF', borderTopWidth: 1, borderTopColor: '#EAF0F6', paddingTop: 7, paddingBottom: 7, paddingHorizontal: 5 },
+  deleteButton: { backgroundColor: color('#FFF0F0'), padding: 8, borderRadius: 10, alignItems: 'center', marginTop: 8 },
+  deleteText: { color: color('#D04452'), fontWeight: '800', fontSize: 12 },
+  bottomActions: { padding: 14, backgroundColor: color('#F5F7FC') },
+  bottomNavigation: { flexDirection: 'row', backgroundColor: color('#FFFFFF'), borderTopWidth: 1, borderTopColor: color('#EAF0F6'), paddingTop: 7, paddingBottom: 7, paddingHorizontal: 5 },
   navItem: { flex: 1, alignItems: 'center', justifyContent: 'center', minHeight: 52, borderRadius: 15, marginHorizontal: 3 },
-  navIcon: { color: '#9AA8B9', fontSize: 22, lineHeight: 26 },
-  navLabel: { color: '#9AA8B9', fontSize: 10, fontWeight: '800', marginTop: 2 },
-  navActive: { color: '#079DA8' },
-  historyCard: { backgroundColor: '#FFFFFF', borderRadius: 17, padding: 16, marginBottom: 11, borderWidth: 1, borderColor: '#E9EEF5' },
-  historyTitle: { color: '#102A4C', fontWeight: '900', fontSize: 17 },
-  status: { color: '#079DA8', fontWeight: '800', marginVertical: 6, fontSize: 11 },
-  cameraRoot: { flex: 1, backgroundColor: '#000000' },
+  navIcon: { color: color('#9AA8B9'), fontSize: 22, lineHeight: 26 },
+  navLabel: { color: color('#9AA8B9'), fontSize: 10, fontWeight: '800', marginTop: 2 },
+  navActive: { color: color('#079DA8') },
+  historyCard: { backgroundColor: color('#FFFFFF'), borderRadius: 17, padding: 16, marginBottom: 11, borderWidth: 1, borderColor: color('#E9EEF5') },
+  historyTitle: { color: color('#102A4C'), fontWeight: '900', fontSize: 17 },
+  status: { fontWeight: '800', marginVertical: 6, fontSize: 11 },
+  statusSent: { color: color('#218739') },
+  statusPending: { color: color('#A86B00') },
+  statusFailed: { color: color('#C13D4B') },
+  statusDraft: { color: color('#5B6E85') },
+  cameraRoot: { flex: 1, backgroundColor: color('#000000') },
   cameraTop: { position: 'absolute', top: 48, left: 16, right: 16, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  cameraLabel: { color: '#FFFFFF', fontWeight: '700', backgroundColor: '#00000088', padding: 10, borderRadius: 12, flexShrink: 1 },
+  cameraLabel: { color: color('#FFFFFF'), fontWeight: '700', backgroundColor: color('#00000088'), padding: 10, borderRadius: 12, flexShrink: 1 },
   cameraBottom: { position: 'absolute', bottom: 35, alignSelf: 'center', alignItems: 'center' },
-  shutter: { width: 82, height: 82, borderRadius: 41, borderWidth: 5, borderColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center' },
-  shutterInner: { width: 62, height: 62, borderRadius: 31, backgroundColor: '#FFFFFF' },
-  cameraHint: { color: '#FFFFFF', marginTop: 12, fontWeight: '700' },
-  error: { color: '#D04452', marginVertical: 10 },
-  reserved: { color: '#079DA8', fontWeight: '900', marginVertical: 10 },
-  previewHero: { backgroundColor: '#E1FAF8', borderRadius: 21, padding: 22, alignItems: 'center', marginBottom: 16 },
-  previewIcon: { width: 46, height: 46, borderRadius: 16, backgroundColor: '#08AEB9', color: '#06223F', textAlign: 'center', lineHeight: 46, fontSize: 23, fontWeight: '900', marginBottom: 10, overflow: 'hidden' },
-  previewTitle: { color: '#102A4C', fontSize: 19, fontWeight: '900', marginBottom: 5 },
-  summaryCard: { backgroundColor: '#FFFFFF', borderRadius: 18, padding: 16, borderWidth: 1, borderColor: '#E9EEF5' },
-  summaryRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 9, borderBottomWidth: 1, borderBottomColor: '#EEF2F6' },
-  summaryLabel: { color: '#8291A5', fontSize: 13 },
-  summaryValue: { color: '#102A4C', fontWeight: '900', fontSize: 13 },
+  shutter: { width: 82, height: 82, borderRadius: 41, borderWidth: 5, borderColor: color('#FFFFFF'), alignItems: 'center', justifyContent: 'center' },
+  shutterInner: { width: 62, height: 62, borderRadius: 31, backgroundColor: color('#FFFFFF') },
+  cameraHint: { color: color('#FFFFFF'), marginTop: 12, fontWeight: '700' },
+  error: { color: color('#D04452'), marginVertical: 10 },
+  reserved: { color: color('#079DA8'), fontWeight: '900', marginVertical: 10 },
+  previewHero: { backgroundColor: color('#E1FAF8'), borderRadius: 21, padding: 22, alignItems: 'center', marginBottom: 16 },
+  previewIcon: { width: 46, height: 46, borderRadius: 16, backgroundColor: color('#08AEB9'), color: color('#06223F'), textAlign: 'center', lineHeight: 46, fontSize: 23, fontWeight: '900', marginBottom: 10, overflow: 'hidden' },
+  previewTitle: { color: color('#102A4C'), fontSize: 19, fontWeight: '900', marginBottom: 5 },
+  summaryCard: { backgroundColor: color('#FFFFFF'), borderRadius: 18, padding: 16, borderWidth: 1, borderColor: color('#E9EEF5') },
+  summaryRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 9, borderBottomWidth: 1, borderBottomColor: color('#EEF2F6') },
+  summaryLabel: { color: color('#8291A5'), fontSize: 13 },
+  summaryValue: { color: color('#102A4C'), fontWeight: '900', fontSize: 13 },
   previewGrid: { flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: -4 },
-  previewImage: { width: '31%', aspectRatio: 1, margin: '1%', borderRadius: 13, backgroundColor: '#E9EEF5' },
-  photoViewer: { ...StyleSheet.absoluteFill, zIndex: 10, backgroundColor: '#07111F', alignItems: 'center', justifyContent: 'center', padding: 18 },
+  previewImage: { width: '31%', aspectRatio: 1, margin: '1%', borderRadius: 13, backgroundColor: color('#E9EEF5') },
+  photoViewer: { ...StyleSheet.absoluteFill, zIndex: 10, backgroundColor: color('#07111F'), alignItems: 'center', justifyContent: 'center', padding: 18 },
   fullScreenImage: { width: '100%', height: '78%' },
-  photoViewerClose: { position: 'absolute', top: 42, right: 20, zIndex: 11, width: 42, height: 42, borderRadius: 15, backgroundColor: '#FFFFFF33', alignItems: 'center', justifyContent: 'center' },
-  photoViewerCloseText: { color: '#FFFFFF', fontSize: 32, fontWeight: '300', lineHeight: 36 },
-  photoViewerName: { color: '#FFFFFF', fontSize: 12, marginTop: 16, textAlign: 'center' },
-  settingCard: { backgroundColor: '#FFFFFF', borderRadius: 17, padding: 16, marginTop: 12, borderWidth: 1, borderColor: '#E9EEF5' },
-  settingLabel: { color: '#8291A5', fontSize: 12, fontWeight: '800', marginBottom: 6 },
-  settingValue: { color: '#102A4C', fontSize: 15, fontWeight: '900' },
-  sectionCaption: { color: '#102A4C', fontSize: 16, fontWeight: '900', marginTop: 28, marginBottom: 8 },
-  confirmationLabel: { color: '#102A4C', fontSize: 16, fontWeight: '900', marginTop: 22, marginBottom: 2 },
-  confirmationHint: { color: '#8291A5', fontSize: 12, lineHeight: 18, marginTop: 8 },
-  detailPhoto: { backgroundColor: '#FFFFFF', borderRadius: 17, padding: 10, marginTop: 12 },
-  detailImage: { width: '100%', height: 210, borderRadius: 13, backgroundColor: '#E9EEF5' }
-});
+  photoViewerClose: { position: 'absolute', top: 42, right: 20, zIndex: 11, width: 42, height: 42, borderRadius: 15, backgroundColor: color('#FFFFFF33'), alignItems: 'center', justifyContent: 'center' },
+  photoViewerCloseText: { color: color('#FFFFFF'), fontSize: 32, fontWeight: '300', lineHeight: 36 },
+  photoViewerName: { color: color('#FFFFFF'), fontSize: 12, marginTop: 16, textAlign: 'center' },
+  settingCard: { backgroundColor: color('#FFFFFF'), borderRadius: 17, padding: 16, marginTop: 12, borderWidth: 1, borderColor: color('#E9EEF5') },
+  settingLabel: { color: color('#8291A5'), fontSize: 12, fontWeight: '800', marginBottom: 6 },
+  settingValue: { color: color('#102A4C'), fontSize: 15, fontWeight: '900' },
+  sectionCaption: { color: color('#102A4C'), fontSize: 16, fontWeight: '900', marginTop: 28, marginBottom: 8 },
+  confirmationLabel: { color: color('#102A4C'), fontSize: 16, fontWeight: '900', marginTop: 22, marginBottom: 2 },
+  confirmationHint: { color: color('#8291A5'), fontSize: 12, lineHeight: 18, marginTop: 8 },
+  detailPhoto: { backgroundColor: color('#FFFFFF'), borderRadius: 17, padding: 10, marginTop: 12 },
+  detailImage: { width: '100%', height: 210, borderRadius: 13, backgroundColor: color('#E9EEF5') },
+  themeSettingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }
+  });
+}
+
+function themeColor(value: string, isDark: boolean): string {
+  const day: Record<string, string> = {
+    '#071B3B': '#12345A', '#13C6D5': '#1686D9', '#F5F7FC': '#F3F6FA',
+    '#E4F7F5': '#DCEEFF', '#EAF0FF': '#E3EDFF', '#F0F7FA': '#EAF3FB',
+    '#D9F3F1': '#D6E9FF', '#079DA8': '#0B5F5B', '#078F9A': '#0B5F5B',
+    '#08AEB9': '#0F766E', '#8AD9D5': '#8BBBEA', '#E1FAF8': '#E0EDFF',
+    '#E0F6F4': '#DCEBFA', '#42D6D8': '#8CC8FF', '#123F70': '#24527E',
+    '#123D68': '#24527E', '#E9F8F7': '#E7F1FC', '#D3F0ED': '#D1E2F4',
+    '#EEF2FF': '#E9F0FA', '#E0E7FF': '#D8E4F3',
+    '#E5F4E8': '#E5F4E8', '#B9DCC1': '#B9DCC1',
+    '#E5EEFF': '#E5EEFF', '#B9CCF0': '#B9CCF0'
+  };
+  if (!isDark) return day[value] || value;
+
+  // Palette sombre : surfaces foncées, textes clairs et couleurs d'état lisibles.
+  const dark: Record<string, string> = {
+    '#000000': '#000000', '#00000088': '#000000AA',
+    '#071B3B': '#14283D', '#0B2A53': '#1B3550', '#07111F': '#07111F',
+    '#F5F7FC': '#101923', '#F3F6FA': '#101923',
+    '#FFFFFF': '#1B2836', '#F8FAFC': '#1B2836',
+    '#F0F7FA': '#202F3E', '#EAF3FB': '#202F3E',
+    '#E1FAF8': '#203A4B', '#E4F7F5': '#203A4B',
+    '#EAF0FF': '#26374B',
+    '#D9F3F1': '#29465B', '#E0F6F4': '#203A4B',
+    '#E9F8F7': '#203A4B', '#EEF2FF': '#26374B',
+    '#E9EEF5': '#344454', '#E5EBF2': '#344454',
+    '#DDE6F0': '#405367', '#EAF0F6': '#344454',
+    '#EEF2F6': '#344454', '#F0F4FF': '#293A4D',
+    '#E9F0FF': '#26374B', '#E0E7FF': '#344B65',
+    '#E5F4E8': '#203B32', '#B9DCC1': '#365B49',
+    '#E5EEFF': '#20334D', '#B9CCF0': '#3A5275',
+    '#102A4C': '#F0F5FB', '#183554': '#E3EDF8',
+    '#06223F': '#FFFFFF', '#0B5F5B': '#8BE0D2',
+    '#0F766E': '#8BE0D2', '#647891': '#C0CDDA',
+    '#687B91': '#C0CDDA', '#718198': '#C0CDDA',
+    '#7B8BA2': '#B9C8D8', '#8291A5': '#B9C8D8',
+    '#7892AA': '#B9C8D8', '#94A3B8': '#B9C8D8',
+    '#9AA8B8': '#B9C8D8', '#9AA8B9': '#B9C8D8',
+    '#8FA8C7': '#C0D0E4', '#C0D0E4': '#C0D0E4',
+    '#557087': '#C0CDDA', '#D04452': '#FF929B',
+    '#FFF0F0': '#482B34', '#13C6D5': '#8CC8FF',
+    '#08AEB9': '#8CC8FF', '#079DA8': '#8CC8FF',
+    '#078F9A': '#8CC8FF', '#0AAAB7': '#8CC8FF',
+    '#42D6D8': '#8CC8FF', '#8AD9D5': '#386B91',
+    '#D7E0EA': '#405367', '#E1E8F0': '#405367',
+    '#D3F0ED': '#31516C', '#218739': '#80D99A',
+    '#A86B00': '#F5CB75', '#C13D4B': '#FF929B',
+    '#5B6E85': '#B9C8D8', '#1686D9': '#8CC8FF',
+    '#12345A': '#DDEBFA', '#24527E': '#B8D5F5',
+    '#E0EDFF': '#26374B', '#DCEEFF': '#26374B',
+    '#DCEBFA': '#26374B', '#D6E9FF': '#26374B',
+    '#E7F1FC': '#26374B', '#D1E2F4': '#344B65',
+    '#E9F0FA': '#26374B', '#D8E4F3': '#344B65'
+  };
+  if (dark[value]) return dark[value];
+
+  // Sécurité pour toute couleur ajoutée ultérieurement : éviter les couleurs
+  // très claires en fond et les couleurs très foncées pour les textes en mode nuit.
+  const hex = value.replace('#', '');
+  if (/^[0-9A-Fa-f]{6}$/.test(hex)) {
+    const r = parseInt(hex.slice(0, 2), 16);
+    const g = parseInt(hex.slice(2, 4), 16);
+    const b = parseInt(hex.slice(4, 6), 16);
+    const luminance = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+    if (luminance > 0.82) return '#263747';
+    if (luminance > 0.65) return '#202F3E';
+    if (luminance < 0.18) return '#EAF2FA';
+    if (luminance < 0.35) return '#B9C8D8';
+  }
+  return value;
+}
